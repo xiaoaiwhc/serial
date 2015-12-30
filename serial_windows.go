@@ -62,7 +62,7 @@ func openPort(name string, baud int, readTimeout time.Duration) (p *Port, err er
 	if err = setCommState(h, baud); err != nil {
 		return
 	}
-	if err = setupComm(h, 64, 64); err != nil {
+	if err = setupComm(h, 2048, 2048); err != nil {
 		return
 	}
 	if err = setCommTimeouts(h, readTimeout); err != nil {
@@ -135,6 +135,7 @@ func (p *Port) Flush() error {
 
 var (
 	nSetCommState,
+	nGetCommState,
 	nSetCommTimeouts,
 	nSetCommMask,
 	nSetupComm,
@@ -153,6 +154,7 @@ func init() {
 	defer syscall.FreeLibrary(k32)
 
 	nSetCommState = getProcAddr(k32, "SetCommState")
+	nGetCommState = getProcAddr(k32, "GetCommState")
 	nSetCommTimeouts = getProcAddr(k32, "SetCommTimeouts")
 	nSetCommMask = getProcAddr(k32, "SetCommMask")
 	nSetupComm = getProcAddr(k32, "SetupComm")
@@ -171,8 +173,23 @@ func getProcAddr(lib syscall.Handle, name string) uintptr {
 	return addr
 }
 
+func getCommState(h syscall.Handle, dcb *structDCB) error {
+	r, _, err := syscall.Syscall(nGetCommState, 2, uintptr(h), uintptr(unsafe.Pointer(dcb)), 0)
+	if r == 0 {
+		return err 
+	}
+	
+	return nil
+}
+
 func setCommState(h syscall.Handle, baud int) error {
 	var params structDCB
+	
+	err := getCommState(h, &params)
+	if err != nil {
+		return err 
+	}
+	
 	params.DCBlength = uint32(unsafe.Sizeof(params))
 
 	params.flags[0] = 0x01  // fBinary
